@@ -1,16 +1,10 @@
 {
   "instances":{
-    "lowes":{
-      "sugar_version":"7722",
-      "sugar_flavor": "ent",
-      "branch":"lowes",
-      "backup_dir": "~/Documents/Merxbp/Proyectos/Lowes/backups/lastest"
-    },
     "lowesqa":{
       "sugar_version":"7822",
       "sugar_flavor": "ent",
       "branch":"lowes",
-      "backup_dir": "~/Documents/Merxbp/Proyectos/Lowes/backups/lowesqa/lastest",
+      "backup_dir": "~/Documents/Merx/Proyectos/Lowes/backups/lowesqa/7.8.2.2",
       "dbconfig":{
         "db_host_name": "ondemandus11-dbc-1-db-1.cge3wj1tjwac.us-west-2.rds.amazonaws.com",
         "db_user_name": "u_lowesqa",
@@ -29,7 +23,7 @@
     }
   },
   "vagrant":{
-    "dir_base":"~/Merx/vagrant/sugar7-php56/"
+    "dir_base":"~/Documents/Merx/vagrant/sugar7-php56/"
   },
   "github":{
     "user": "betobaz"
