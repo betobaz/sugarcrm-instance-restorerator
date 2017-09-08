@@ -3,6 +3,7 @@ var prompt = require('co-prompt');
 var program = require('commander');
 var shell = require('shelljs');
 var nconf = require('nconf');
+var child_process = require('child_process')
 nconf.file({ file: "config.json" });
 
 
@@ -26,6 +27,7 @@ program
       shell.cd(metadata.backup_dir);
       var tar_dir = instance+".sugarondemand.com."+metadata.sugar_version+metadata.sugar_flavor+".*";
       shell.exec("tar -zxvf "+ tar_dir + ".tar.gz");
+
       shell.cd(tar_dir);
       shell.exec("mv sugar" + metadata.sugar_version+metadata.sugar_flavor + " " + instance_dir);
       shell.exec("mv sugar" + metadata.sugar_version+metadata.sugar_flavor + ".sql " + instance_dir);
@@ -51,7 +53,9 @@ program
       shell.exec(vagrant_ssh_mysql + '-e "CREATE DATABASE '+instance+'"' + "'");
       shell.exec(vagrant_ssh_mysql + instance +" < /vagrant/"+instance+".merxbp.loc/sugar"+metadata.sugar_version+metadata.sugar_flavor+".sql");
       shell.exec(vagrant_ssh_mysql + instance +"_origin < /vagrant/"+instance+".merxbp.loc/sugar"+metadata.sugar_version+metadata.sugar_flavor+".sql");
+      if(metadata.db_scripts.l){
 
+      }
       // shell.ls('*.*').forEach(function (file) {
       //   console.log(file);
       // });
