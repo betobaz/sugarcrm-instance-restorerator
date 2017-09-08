@@ -1,0 +1,25 @@
+{
+  "name": "instance-restorerator",
+  "version": "1.0.0",
+  "description": "restaurador de instancia de sugar",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "restaurador",
+    "restorerator"
+  ],
+  "author": "PABS",
+  "license": "ISC",
+  "bin": {
+    "sugar-restore": "./index.js"
+  },
+  "dependencies": {
+    "co": "^4.6.0",
+    "co-prompt": "^1.0.0",
+    "commander": "^2.11.0",
+    "nconf": "^0.8.4",
+    "shelljs": "^0.7.8"
+  }
+}

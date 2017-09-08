@@ -1,0 +1,37 @@
+{
+  "instances":{
+    "lowes":{
+      "sugar_version":"7722",
+      "sugar_flavor": "ent",
+      "branch":"lowes",
+      "backup_dir": "~/Documents/Merxbp/Proyectos/Lowes/backups/lastest"
+    },
+    "lowesqa":{
+      "sugar_version":"7822",
+      "sugar_flavor": "ent",
+      "branch":"lowes",
+      "backup_dir": "~/Documents/Merxbp/Proyectos/Lowes/backups/lowesqa/lastest",
+      "dbconfig":{
+        "db_host_name": "ondemandus11-dbc-1-db-1.cge3wj1tjwac.us-west-2.rds.amazonaws.com",
+        "db_user_name": "u_lowesqa",
+        "db_password": "64saaCMN-FWg_Mr",
+        "db_name": "db_lowesqa"
+      },
+      "Elastic":{
+        "host": "internal-ondemandus11-Internal-1394614045.us-west-2.elb.amazonaws.com"
+      },
+      "db_scripts":[
+        "DELETE FROM accounts;DELETE FROM accounts_cstm;DELETE FROM lowes_pagos;DELETE FROM lowes_pagos_cstm;DELETE FROM lf_facturas;DELETE FROM lf_facturas_cstm;DELETE FROM nc_notas_credito;DELETE FROM nc_notas_credito_cstm;DELETE FROM orden_ordenes;DELETE FROM orden_ordenes_cstm;DELETE FROM gpe_grupo_empresas;DELETE FROM gpe_grupo_empresas_cstm;DELETE FROM lowae_autorizacion_especial;DELETE FROM lowae_autorizacion_especial_cstm;DELETE FROM nc_notas_credito;DELETE FROM nc_notas_credito_cstm;DELETE FROM lowae_autorizacion_especial;DELETE FROM lowae_autorizacion_especial_cstm;DELETE FROM gpe_grupo_empresas;DELETE FROM leads;",
+        "UPDATE users SET user_hash = 'b2805e7bb0a5c52ccaeac9892387e961';",
+        "ALTER TABLE lowes_pagos MODIFY COLUMN num_folio_c int(11) auto_increment NOT NULL, ADD KEY(num_folio_c);",
+        "UPDATE users SET deleted = 1 WHERE deleted = 0 AND is_admin = 0;"
+      ]
+    }
+  },
+  "vagrant":{
+    "dir_base":"~/Merx/vagrant/sugar7-php56/"
+  },
+  "github":{
+    "user": "betobaz"
+  }
+}
