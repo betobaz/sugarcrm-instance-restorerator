@@ -8,37 +8,42 @@ var child_process = require('child_process');
 var Promise = require('bluebird');
 var fs = require('fs');
 var colors = require('colors');
-
-nconf.file({ file: "config.json" });
+var ora = require('ora');
+var spinner;
 
 var metadata = null;
 var instance_dir = null;
 var instance_name = null;
 
+nconf.file({ file: "config.json" });
+
 program
 .arguments('<instance>')
-.action(function(instance) {
+.option('-g, --git-only', 'Elimina la carpeta .git y obtiene cambios del repositorio remoto')
+.action(function(instance, command) {
+
   co(function *() {
     metadata = nconf.get('instances:'+instance);
     if(metadata){
       instance_name = instance;
       instance_dir = nconf.get('vagrant:dir_base') + instance_name + ".merxbp.loc";
-      message =  "Iniciando restore "+instance+".merxbp.loc ... ";
-      console.log(message.green);
-      eliminarInstancia();
-      yield co(extraerArchivos);
-      modificarArchivos();
-      restaurarDB();
-      yield co(obtenerVersion);
-      message = "Finalizando restore "+instance+".merxbp.loc ... ";
-      console.log(message.green);
+      message =  "Iniciando restore "+instance+".merxbp.loc";
+      spinner = ora(message).start();
+      // console.log(message.green);
+      if(program.gitOnly){
+        yield co(obtenerVersion);
+      }
+      // eliminarInstancia();
+      // yield co(extraerArchivos);
+      // modificarArchivos();
+      // restaurarDB();
+      // yield co(obtenerVersion);
+      message = "Finalizando restore "+instance+".merxbp.loc";
+      spinner.succeed(message);
+      spinner.stop();
     }
   });
 
-  // if(instance_name){
-  //   co(obtenerVersion);
-  // }
-  // obtenerVersion();
 })
 .parse(process.argv);
 
@@ -135,10 +140,18 @@ function restaurarDB() {
 }
 
 function *obtenerVersion() {
-  console.log("Configurando version de desarrollo ...".green);
-  console.log("instance_dir:", instance_dir);
+  spinner.text = "Configurando version de desarrollo ...";
+
+  yield co(fetchLocalDirFromRemote);
+
   shell.cd(instance_dir);
-  console.log("Configurando primer commit ...");
+
+  if(program.gitOnly){
+    shell.rm("-rf", instance_dir + '/.git*');
+  }
+
+  message = "Configurando primer commit";
+  spinner.text = message;
   shell.exec('touch .gitignore');
   shell.exec('git init');
   shell.exec('git add .gitignore');
@@ -146,23 +159,27 @@ function *obtenerVersion() {
   shell.exec('echo "*" > .gitignore');
   shell.exec('git add .gitignore');
   shell.exec('git commit -m "Omitiendo archivos"');
-
-  console.log("Configurando repositorios remotos ...");
+  spinner.succeed(message);
+  
+  message = "Configurando repositorios remotos";
+  spinner.text = message;
+  shell.exec('git remote add local '+ nconf.get('github:local:dir'));
   shell.exec('git remote add origin git@github.com:'+nconf.get('github:user')+'/custom_sugarcrm.git');
   shell.exec('git remote add merx git@github.com:MerxBusinessPerformance/custom_sugarcrm.git');
+  spinner.succeed(message);
 
-  console.log("Obteniendo cambios desde el repositorio remoto");
-  var git_fetch_origin = yield child_process.spawn('git', ['fetch', 'origin'], {
+  message = "Obteniendo cambios desde el repositorio local";
+  spinner.text = message;
+  var git_fetch_origin = yield promiseFromChildProcess(child_process.spawn('git', ['fetch', 'local'], {
     cwd: instance_dir,
     stdio: 'inherit'
-  });
+  }));
+  spinner.succeed(message);
 
-  var git_fetch_merx = yield child_process.spawn('git', ['fetch', 'merx'], {
-    cwd: instance_dir,
-    stdio: 'inherit'
-  });
-  shell.exec('git checkout -b '+metadata.branch+' merx/'+metadata.branch);
-  console.log("Cambiando al branch " + metadata.branch);
+  command = 'git checkout -b '+metadata.branch+' local/'+metadata.branch;
+  shell.exec(command);
+
+  spinner.succeed("Branch cambiado a" + metadata.branch);
 }
 
 function promiseFromChildProcess(child) {
@@ -170,4 +187,13 @@ function promiseFromChildProcess(child) {
       child.addListener("error", reject);
       child.addListener("exit", resolve);
   });
+}
+
+function *fetchLocalDirFromRemote() {
+  spinner.text = "Actualizando repositorio local";
+  var git_fetch_origin = yield promiseFromChildProcess(child_process.spawn('git', ['fetch', nconf.get('github:local:remote')], {
+    cwd: nconf.get('github:local:dir'),
+    stdio: 'inherit'
+  }));
+  spinner.succeed("Repositorio local actualizado");
 }
