@@ -20,7 +20,9 @@ nconf.file({ file: "config.json" });
 program
 .arguments('<instance>')
 .option('-g, --git-only', 'Elimina la carpeta .git y obtiene cambios del repositorio remoto')
+.option('-d, --database-only', 'Elimina la carpeta .git y obtiene cambios del repositorio remoto')
 .action(function(instance, command) {
+  // console.log(program.databaseOnly);
 
   co(function *() {
     metadata = nconf.get('instances:'+instance);
@@ -29,16 +31,22 @@ program
       instance_dir = nconf.get('vagrant:dir_base') + instance_name + ".merxbp.loc";
       message =  "Iniciando restore "+instance+".merxbp.loc";
       spinner = ora(message).start();
-      // console.log(message.green);
+      spinner.succeed(message);
+      spinner.stop();
       if(program.gitOnly){
         yield co(obtenerVersion);
+      }else if(program.databaseOnly){
+        yield co(restaurarDB);
       }
-      // eliminarInstancia();
-      // yield co(extraerArchivos);
-      // modificarArchivos();
-      // restaurarDB();
-      // yield co(obtenerVersion);
+      else{
+        yield co(eliminarInstancia);
+        yield co(extraerArchivos);
+        modificarArchivos();
+        yield co(restaurarDB);
+        yield co(obtenerVersion);
+      }
       message = "Finalizando restore "+instance+".merxbp.loc";
+      spinner = ora(message).start();
       spinner.succeed(message);
       spinner.stop();
     }
@@ -47,18 +55,27 @@ program
 })
 .parse(process.argv);
 
-function eliminarInstancia() {
-  console.log("Eliminando instancia obsoleta lowes.merxbp.loc ... ".green);
-  shell.rm("-rf", instance_dir);
+function *eliminarInstancia() {
+  message = "Eliminando instancia obsoleta "+instance_name+".merxbp.loc";
+  promise = promiseFromChildProcess(
+    child_process.spawn('rm -rf '+instance_dir, {
+      shell: true
+    })
+  );
+  ora.promise(promise, {text:message});
+  yield promise;
 }
 
 function *extraerArchivos() {
-  console.log("Extrayendo restore files ... ".green);
+  message = "Extrayendo restore files";
+  spinner.text = message;
+
   shell.cd(metadata.backup_dir);
   var tar_dir = instance_name+".sugarondemand.com."+metadata.sugar_version+metadata.sugar_flavor+".*";
   pv = shell.which('pv');
   if (pv) {
     // console.log("Entrar para pv");
+    spinner.stop();
     try {
        files = []
        shell.ls('*.gz').forEach(function (file) {
@@ -76,18 +93,24 @@ function *extraerArchivos() {
     } catch (err) {
       console.error(`chdir: ${err}`);
     }
+    spinner = ora(message).start();
   }
   else{
     yield shell.exec("tar -zxvf "+ tar_dir + ".tar.gz");
   }
-  console.log("Moviendo carpeta de la isntancia".green);
+  spinner.succeed(message);
+
+  message = "Moviendo carpeta de la instancia";
+  spinner.text = message;
   shell.cd(tar_dir);
   shell.exec("mv sugar" + metadata.sugar_version+metadata.sugar_flavor + " " + instance_dir);
   shell.exec("mv sugar" + metadata.sugar_version+metadata.sugar_flavor + ".sql " + instance_dir);
+  spinner.succeed(message);
 }
 
 function modificarArchivos() {
-  console.log("Modificando archivos config.php ...".green);
+  message = "Modificando archivos config.php";
+  spinner = ora(message).start();
   shell.cd(instance_dir);
   shell.sed("-i", metadata.dbconfig.db_host_name, "localhost", "config.php");
   shell.sed("-i", metadata.dbconfig.db_user_name, "root", "config.php");
@@ -95,33 +118,84 @@ function modificarArchivos() {
   shell.sed("-i", metadata.dbconfig.db_name, instance_name, "config.php");
   shell.sed("-i", instance_name+".sugarondemand.com", instance_name+".merxbp.loc", "config.php");
   shell.sed("-i", metadata.Elastic.host, "localhost", "config.php");
-  shell.rm("-rf", "cache/*");
+  spinner.succeed(message);
 
-  console.log("Modificando archivos .htaccess ...".green);
+  message = "Borrando contenido de la carpeta cache";
+  spinner.text = message;
+  shell.rm("-rf", "cache/*");
+  spinner.succeed(message);
+
+  message = "Modificando archivos .htaccess";
+  spinner.text = message;
   shell.sed("-i", "RewriteBase /", "RewriteBase /sugar/"+ instance_name+".merxbp.loc/", ".htaccess");
+  spinner.succeed(message);
+  spinner.stop();
+
 }
 
-function restaurarDB() {
-  console.log("Restaurando base de datos ...".green);
+function *restaurarDB() {
   shell.cd(instance_dir);
   var vagrant_ssh_mysql = "vagrant ssh -c 'mysql -u root -proot ";
 
-  console.log("Eliminando bases de datos obsoletas ...".green);
-  shell.exec(vagrant_ssh_mysql + '-e "DROP DATABASE '+instance_name+'_origin"' + "'",{silent:true});
-  shell.exec(vagrant_ssh_mysql + '-e "DROP DATABASE '+instance_name+'"' + "'",{silent:true});
-  shell.exec(vagrant_ssh_mysql + '-e "CREATE DATABASE '+instance_name+'_origin"' + "'",{silent:true});
-  shell.exec(vagrant_ssh_mysql + '-e "CREATE DATABASE '+instance_name+'"' + "'",{silent:true});
+  message = "Eliminando bases de datos obsoleta origin";
+  promise = promiseFromChildProcess(
+    child_process.spawn(vagrant_ssh_mysql + '-e "DROP DATABASE '+instance_name+'_origin"' + "'", {
+      shell: true
+    })
+  );
+  ora.promise(promise, {text:message});
+  yield promise;
 
-  console.log("Restaurando base de datos de pruebas...".green);
+  message = "Eliminando bases de datos obsoleta de pruebas";
+  promise = promiseFromChildProcess(
+    child_process.spawn(vagrant_ssh_mysql + '-e "DROP DATABASE '+instance_name+'"' + "'", {
+      shell: true
+    })
+  );
+  ora.promise(promise, {text:message});
+  yield promise;
+
+  message = "Creando bases de datos nueva origin";
+  promise = promiseFromChildProcess(
+    child_process.spawn(vagrant_ssh_mysql + '-e "CREATE DATABASE '+instance_name+'_origin"' + "'", {
+      shell: true
+    })
+  );
+  ora.promise(promise, {text:message});
+  yield promise;
+
+  message = "Creando bases de datos nueva para pruebas";
+  promise = promiseFromChildProcess(
+    child_process.spawn(vagrant_ssh_mysql + '-e "CREATE DATABASE '+instance_name+'"' + "'", {
+      shell: true
+    })
+  );
+  ora.promise(promise, {text:message});
+  yield promise;
+
+  message = "Restaurando base de datos de pruebas";
   command = vagrant_ssh_mysql + instance_name +" < /vagrant/"+instance_name+".merxbp.loc/sugar"+metadata.sugar_version+metadata.sugar_flavor+".sql'";
-  shell.exec(command,{silent:true});
+  promise = promiseFromChildProcess(
+    child_process.spawn(command, {
+      shell: true
+    })
+  );
+  ora.promise(promise, {text:message});
+  yield promise;
 
-  console.log("Restaurando base de datos de origin...".green);
+  message = "Restaurando base de datos de origin";
   command = vagrant_ssh_mysql + instance_name +"_origin < /vagrant/"+instance_name+".merxbp.loc/sugar"+metadata.sugar_version+metadata.sugar_flavor+".sql'";
-  shell.exec(command,{silent:true});
+  promise = promiseFromChildProcess(
+    child_process.spawn(command, {
+      shell: true
+    })
+  );
+  ora.promise(promise, {text:message});
+  yield promise;
 
   if(metadata.dbconfig.db_scripts && metadata.dbconfig.db_scripts.length){
-    console.log("Ejecutando scripts para base de datos de pruebas...".green);
+    message = "Ejecutando scripts para base de datos de pruebas";
+    spinner.text = message;
     scripts_file = instance_name + '_scripts.sql';
     scripts_file_path = instance_dir +'/'+ scripts_file;
     shell.rm("-rf", scripts_file_path);
@@ -134,7 +208,13 @@ function restaurarDB() {
     scripts_sql.end();
 
     command = vagrant_ssh_mysql + instance_name +" < /vagrant/"+instance_name+".merxbp.loc/"+scripts_file+"'";
-    shell.exec(command,{silent:true});
+    promise = promiseFromChildProcess(
+      child_process.spawn(command, {
+        shell: true
+      })
+    );
+    ora.promise(promise, {text:message});
+    yield promise;
     shell.rm("-rf", scripts_file_path);
   }
 }
@@ -160,7 +240,7 @@ function *obtenerVersion() {
   shell.exec('git add .gitignore');
   shell.exec('git commit -m "Omitiendo archivos"');
   spinner.succeed(message);
-  
+
   message = "Configurando repositorios remotos";
   spinner.text = message;
   shell.exec('git remote add local '+ nconf.get('github:local:dir'));
