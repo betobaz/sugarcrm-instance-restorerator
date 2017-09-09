@@ -27,11 +27,11 @@ program
       instance_dir = nconf.get('vagrant:dir_base') + instance_name + ".merxbp.loc";
 
       console.log("Iniciando restore lowes.merxbp.loc ... ");
-      // eliminarInstancia();
-      // yield co(extraerArchivos);
-      // modificarArchivos();
+      eliminarInstancia();
+      yield co(extraerArchivos);
+      modificarArchivos();
       restaurarDB();
-      // yield co(obtenerVersion);
+      yield co(obtenerVersion);
       // shell.ls('*.*').forEach(function (file) {
       //   console.log(file);
       // });
@@ -122,18 +122,18 @@ function restaurarDB() {
     console.log("Ejecutando scripts para base de datos de pruebas...");
     scripts_file = instance_name + '_scripts.sql';
     scripts_file_path = instance_dir +'/'+ scripts_file;
-    console.log(scripts_file_path);
     shell.rm("-rf", scripts_file_path);
     var scripts_sql = fs.createWriteStream(scripts_file_path, {
-      flags: 'a' // 'a' means appending (old data will be preserved)
+      flags: 'a'
     })
     metadata.dbconfig.db_scripts.forEach(function(script) {
       scripts_sql.write(script);
     });
-    command = vagrant_ssh_mysql + instance_name +" < /vagrant/"+instance_name+".merxbp.loc/"+scripts_file+"'";
-    console.log(command)
-    shell.exec(command,{silent:true});
     scripts_sql.end();
+
+    command = vagrant_ssh_mysql + instance_name +" < /vagrant/"+instance_name+".merxbp.loc/"+scripts_file+"'";
+    shell.exec(command,{silent:true});
+    shell.rm("-rf", scripts_file_path);
   }
 }
 
