@@ -44,6 +44,9 @@ program
         modificarArchivos();
         yield co(restaurarDB);
         yield co(obtenerVersion);
+        yield co(sugarcrmInstalandoDependencias);
+        yield co(sugarcrmRepair)
+        yield co(sugarcrmTest)
       }
       message = "Finalizando restore "+instance+".merxbp.loc";
       spinner = ora(message).start();
@@ -276,4 +279,60 @@ function *fetchLocalDirFromRemote() {
     stdio: 'inherit'
   }));
   spinner.succeed("Repositorio local actualizado");
+}
+
+function *sugarcrmInstalandoDependencias() {
+  message = "Instanlando dependencias composer";
+  command = "vagrant ssh -c 'cd /vagrant/"+instance_name+".merxbp.loc; composer install'";
+  promise = promiseFromChildProcess(
+    child_process.spawn(command, {
+      shell: true
+    })
+  );
+  ora.promise(promise, {text:message});
+  yield promise;
+
+  message = "Instanlando dependencias npm";
+  command = "vagrant ssh -c 'cd /vagrant/"+instance_name+".merxbp.loc; npm install'";
+  promise = promiseFromChildProcess(
+    child_process.spawn(command, {
+      shell: true
+    })
+  );
+  ora.promise(promise, {text:message});
+  yield promise;
+}
+
+function *sugarcrmRepair() {
+  message = "Reparando la instancia"
+  command = "vagrant ssh -c 'cd /vagrant/"+instance_name+".merxbp.loc; php repair.php'";
+  promise = promiseFromChildProcess(
+    child_process.spawn(command, {
+      shell: true
+    })
+  );
+  ora.promise(promise, {text:message});
+  yield promise;
+}
+
+function *sugarcrmTest() {
+  message = "Pruebas PHP";
+  command = "vagrant ssh -c 'cd /vagrant/"+instance_name+".merxbp.loc/tests; ../vendor/phpunit/phpunit/phpunit'";
+  promise = promiseFromChildProcess(
+    child_process.spawn(command, {
+      shell: true
+    })
+  );
+  ora.promise(promise, {text:message});
+  yield promise;
+
+  message = "Pruebas JS";
+  command = "vagrant ssh -c 'cd /vagrant/"+instance_name+".merxbp.loc/tests; grunt karma:ci'";
+  promise = promiseFromChildProcess(
+    child_process.spawn(command, {
+      shell: true
+    })
+  );
+  ora.promise(promise, {text:message});
+  yield promise;
 }
