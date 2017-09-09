@@ -7,6 +7,7 @@ var spawn = require('co-child-process');
 var child_process = require('child_process');
 var Promise = require('bluebird');
 var fs = require('fs');
+var colors = require('colors');
 
 nconf.file({ file: "config.json" });
 
@@ -18,23 +19,19 @@ program
 .arguments('<instance>')
 .action(function(instance) {
   co(function *() {
-    // var instance = yield prompt('instance: ');
-    // console.log('instance: %s', instance);
     metadata = nconf.get('instances:'+instance);
     if(metadata){
       instance_name = instance;
-      // console.log(metadata);
       instance_dir = nconf.get('vagrant:dir_base') + instance_name + ".merxbp.loc";
-
-      console.log("Iniciando restore lowes.merxbp.loc ... ");
+      message =  "Iniciando restore "+instance+".merxbp.loc ... ";
+      console.log(message.green);
       eliminarInstancia();
       yield co(extraerArchivos);
       modificarArchivos();
       restaurarDB();
       yield co(obtenerVersion);
-      // shell.ls('*.*').forEach(function (file) {
-      //   console.log(file);
-      // });
+      message = "Finalizando restore "+instance+".merxbp.loc ... ";
+      console.log(message.green);
     }
   });
 
@@ -46,12 +43,12 @@ program
 .parse(process.argv);
 
 function eliminarInstancia() {
-  console.log("Eliminando instancia obsoleta lowes.merxbp.loc ... ");
+  console.log("Eliminando instancia obsoleta lowes.merxbp.loc ... ".green);
   shell.rm("-rf", instance_dir);
 }
 
 function *extraerArchivos() {
-  console.log("Extrayendo restore files ... ");
+  console.log("Extrayendo restore files ... ".green);
   shell.cd(metadata.backup_dir);
   var tar_dir = instance_name+".sugarondemand.com."+metadata.sugar_version+metadata.sugar_flavor+".*";
   pv = shell.which('pv');
@@ -78,14 +75,14 @@ function *extraerArchivos() {
   else{
     yield shell.exec("tar -zxvf "+ tar_dir + ".tar.gz");
   }
-  console.log("Moviendo carpeta de la isntancia");
+  console.log("Moviendo carpeta de la isntancia".green);
   shell.cd(tar_dir);
   shell.exec("mv sugar" + metadata.sugar_version+metadata.sugar_flavor + " " + instance_dir);
   shell.exec("mv sugar" + metadata.sugar_version+metadata.sugar_flavor + ".sql " + instance_dir);
 }
 
 function modificarArchivos() {
-  console.log("Modificando archivos config.php ...");
+  console.log("Modificando archivos config.php ...".green);
   shell.cd(instance_dir);
   shell.sed("-i", metadata.dbconfig.db_host_name, "localhost", "config.php");
   shell.sed("-i", metadata.dbconfig.db_user_name, "root", "config.php");
@@ -95,31 +92,31 @@ function modificarArchivos() {
   shell.sed("-i", metadata.Elastic.host, "localhost", "config.php");
   shell.rm("-rf", "cache/*");
 
-  console.log("Modificando archivos .htaccess ...");
+  console.log("Modificando archivos .htaccess ...".green);
   shell.sed("-i", "RewriteBase /", "RewriteBase /sugar/"+ instance_name+".merxbp.loc/", ".htaccess");
 }
 
 function restaurarDB() {
-  console.log("Restaurando base de datos ...");
+  console.log("Restaurando base de datos ...".green);
   shell.cd(instance_dir);
   var vagrant_ssh_mysql = "vagrant ssh -c 'mysql -u root -proot ";
 
-  console.log("Eliminando bases de datos obsoletas ...");
+  console.log("Eliminando bases de datos obsoletas ...".green);
   shell.exec(vagrant_ssh_mysql + '-e "DROP DATABASE '+instance_name+'_origin"' + "'",{silent:true});
   shell.exec(vagrant_ssh_mysql + '-e "DROP DATABASE '+instance_name+'"' + "'",{silent:true});
   shell.exec(vagrant_ssh_mysql + '-e "CREATE DATABASE '+instance_name+'_origin"' + "'",{silent:true});
   shell.exec(vagrant_ssh_mysql + '-e "CREATE DATABASE '+instance_name+'"' + "'",{silent:true});
 
-  console.log("Restaurando base de datos de pruebas...");
+  console.log("Restaurando base de datos de pruebas...".green);
   command = vagrant_ssh_mysql + instance_name +" < /vagrant/"+instance_name+".merxbp.loc/sugar"+metadata.sugar_version+metadata.sugar_flavor+".sql'";
   shell.exec(command,{silent:true});
 
-  console.log("Restaurando base de datos de origin...");
+  console.log("Restaurando base de datos de origin...".green);
   command = vagrant_ssh_mysql + instance_name +"_origin < /vagrant/"+instance_name+".merxbp.loc/sugar"+metadata.sugar_version+metadata.sugar_flavor+".sql'";
   shell.exec(command,{silent:true});
 
   if(metadata.dbconfig.db_scripts && metadata.dbconfig.db_scripts.length){
-    console.log("Ejecutando scripts para base de datos de pruebas...");
+    console.log("Ejecutando scripts para base de datos de pruebas...".green);
     scripts_file = instance_name + '_scripts.sql';
     scripts_file_path = instance_dir +'/'+ scripts_file;
     shell.rm("-rf", scripts_file_path);
@@ -138,7 +135,7 @@ function restaurarDB() {
 }
 
 function *obtenerVersion() {
-  console.log("Configurando version de desarrollo ...");
+  console.log("Configurando version de desarrollo ...".green);
   console.log("instance_dir:", instance_dir);
   shell.cd(instance_dir);
   console.log("Configurando primer commit ...");
@@ -165,6 +162,7 @@ function *obtenerVersion() {
     stdio: 'inherit'
   });
   shell.exec('git checkout -b '+metadata.branch+' merx/'+metadata.branch);
+  console.log("Cambiando al branch " + metadata.branch);
 }
 
 function promiseFromChildProcess(child) {
