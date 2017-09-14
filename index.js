@@ -21,6 +21,8 @@ program
 .arguments('<instance>')
 .option('-g, --git-only', 'Elimina la carpeta .git y obtiene cambios del repositorio remoto')
 .option('-d, --database-only', 'Elimina la carpeta .git y obtiene cambios del repositorio remoto')
+.option('-p, --test-php', 'Corre test PHP')
+.option('-j, --test-js', 'Corre test JS')
 .action(function(instance, command) {
   // console.log(program.databaseOnly);
 
@@ -37,6 +39,8 @@ program
         yield co(obtenerVersion);
       }else if(program.databaseOnly){
         yield co(restaurarDB);
+      }else if(program.testPhp || program.testJs){
+        yield co(sugarcrmTest);
       }
       else{
         yield co(eliminarInstancia);
@@ -253,7 +257,7 @@ function *obtenerVersion() {
 
   message = "Obteniendo cambios desde el repositorio local";
   spinner.text = message;
-  var git_fetch_origin = yield promiseFromChildProcess(child_process.spawn('git', ['fetch', 'local'], {
+  var git_fetch_origin = yield promiseFromChildProcess(child_process.spawn('git', ['fetch', 'local', metadata.branch], {
     cwd: instance_dir,
     stdio: 'inherit'
   }));
@@ -262,7 +266,7 @@ function *obtenerVersion() {
   command = 'git checkout -b '+metadata.branch+' local/'+metadata.branch;
   shell.exec(command);
 
-  spinner.succeed("Branch cambiado a" + metadata.branch);
+  spinner.succeed("Branch cambiado a " + metadata.branch);
 }
 
 function promiseFromChildProcess(child) {
@@ -286,17 +290,21 @@ function *sugarcrmInstalandoDependencias() {
   command = "vagrant ssh -c 'cd /vagrant/"+instance_name+".merxbp.loc; composer install'";
   promise = promiseFromChildProcess(
     child_process.spawn(command, {
-      shell: true
+      cwd: instance_dir,
+      shell: true,
+      stdio: 'inherit'
     })
   );
   ora.promise(promise, {text:message});
   yield promise;
 
   message = "Instanlando dependencias npm";
-  command = "vagrant ssh -c 'cd /vagrant/"+instance_name+".merxbp.loc; npm install'";
+  command = "vagrant ssh -c 'cd /vagrant/"+instance_name+".merxbp.loc; yarn'";
   promise = promiseFromChildProcess(
     child_process.spawn(command, {
-      shell: true
+      cwd: instance_dir,
+      shell: true,
+      stdio: 'inherit'
     })
   );
   ora.promise(promise, {text:message});
@@ -308,7 +316,9 @@ function *sugarcrmRepair() {
   command = "vagrant ssh -c 'cd /vagrant/"+instance_name+".merxbp.loc; php repair.php'";
   promise = promiseFromChildProcess(
     child_process.spawn(command, {
-      shell: true
+      cwd: instance_dir,
+      shell: true,
+      stdio: 'inherit'
     })
   );
   ora.promise(promise, {text:message});
@@ -316,11 +326,14 @@ function *sugarcrmRepair() {
 }
 
 function *sugarcrmTest() {
+
   message = "Pruebas PHP";
   command = "vagrant ssh -c 'cd /vagrant/"+instance_name+".merxbp.loc/tests; ../vendor/phpunit/phpunit/phpunit'";
   promise = promiseFromChildProcess(
     child_process.spawn(command, {
-      shell: true
+      cwd: instance_dir,
+      shell: true,
+      stdio: 'inherit'
     })
   );
   ora.promise(promise, {text:message});
@@ -330,7 +343,9 @@ function *sugarcrmTest() {
   command = "vagrant ssh -c 'cd /vagrant/"+instance_name+".merxbp.loc/tests; grunt karma:ci'";
   promise = promiseFromChildProcess(
     child_process.spawn(command, {
-      shell: true
+      cwd: instance_dir,
+      shell: true,
+      stdio: 'inherit'
     })
   );
   ora.promise(promise, {text:message});
