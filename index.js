@@ -278,10 +278,36 @@ function promiseFromChildProcess(child) {
 
 function *fetchLocalDirFromRemote() {
   spinner.text = "Actualizando repositorio local";
-  var git_fetch_origin = yield promiseFromChildProcess(child_process.spawn('git', ['fetch', nconf.get('github:local:remote')], {
+  var branch_validate = child_process.spawn(' git branch --list | grep ' + metadata.branch, {
     cwd: nconf.get('github:local:dir'),
-    stdio: 'inherit'
-  }));
+    shell: true
+  });
+  var output = "";
+  branch_validate.stdout.on('data', function (data) {
+    output = data.toString().trim().replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '').replace('* ', '');
+    console.log("output:", JSON.stringify(output));
+  });
+  var git_fetch_origin = yield promiseFromChildProcess(branch_validate);
+  if(output && output === metadata.branch){
+    console.log("si tiene el branch");
+    command = 'git checkout ' + metadata.branch + '; git pull ' + nconf.get('github:local:remote') + ' ' + metadata.branch;
+    console.log("command:" , command)
+    var git_fetch_origin = yield promiseFromChildProcess(child_process.spawn(command, {
+      cwd: nconf.get('github:local:dir'),
+      shell: true,
+      stdio: 'inherit'
+    }));
+  }
+  else{
+    console.log("no tiene el branch");
+    command = 'git fetch ' + nconf.get('github:local:remote') + ' ' + metadata.branch + '; git checkout -b ' + metadata.branch + ' ' + nconf.get('github:local:remote') + '/' + metadata.branch;
+    console.log("command:" , command)
+    var git_fetch_origin = yield promiseFromChildProcess(child_process.spawn(command, {
+      cwd: nconf.get('github:local:dir'),
+      shell: true,
+      stdio: 'inherit'
+    }));
+  }
   spinner.succeed("Repositorio local actualizado");
 }
 
