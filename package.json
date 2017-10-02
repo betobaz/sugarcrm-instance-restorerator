@@ -24,8 +24,13 @@
     "co-prompt": "^1.0.0",
     "colors": "^1.1.2",
     "commander": "^2.11.0",
+    "gulp-awaitable-tasks": "^1.0.0",
+    "minimist": "^1.2.0",
     "nconf": "^0.8.4",
     "ora": "^1.3.0",
     "shelljs": "^0.7.8"
+  },
+  "devDependencies": {
+    "gulp": "^3.9.1"
   }
 }
