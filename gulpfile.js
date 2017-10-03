@@ -6,6 +6,7 @@ var child_process = require('child_process');
 var shell = require('shelljs');
 var fs = require('fs');
 var readdir = require('fs-readdir-promise');
+var co = require('co');
 
 require('gulp-awaitable-tasks')(gulp);
 
@@ -24,12 +25,6 @@ var instance_name = instance;
 var instance_dir = nconf.get('vagrant:dir_base') + instance_name + ".merxbp.loc";
 
 var metadata = nconf.get('instances:'+instance);
-var promiseFromChildProcess = function(child) {
-  return new Promise(function (resolve, reject) {
-      child.addListener("error", reject);
-      child.addListener("exit", resolve);
-  });
-};
 
 gulp.task("delete_directory", function* () {
   message = "Eliminando instancia obsoleta "+instance_name+".merxbp.loc";
@@ -106,7 +101,7 @@ gulp.task("extract_files",[
 
   message = "Moviendo archivo SQL";
   spawnMv = child_process.spawn("mv sugar" + metadata.sugar_version+metadata.sugar_flavor + ".sql " + instance_dir, {
-    cwd: metadata.backup_dir,
+    cwd: backup_dir,
     stdio: 'inherit',
     shell: true
   });
@@ -117,9 +112,282 @@ gulp.task("extract_files",[
   return;
 });
 
-gulp.task('saludo', function () {
-  console.log("saludo", options);
+gulp.task('change_files', ['extract_files'], function () {
+  message = "Modificando archivos config.php";
+  spinner = ora(message).start();
+  shell.cd(instance_dir);
+  shell.sed("-i", metadata.dbconfig.db_host_name, "localhost", "config.php");
+  shell.sed("-i", metadata.dbconfig.db_user_name, "root", "config.php");
+  shell.sed("-i", metadata.dbconfig.db_password, "root", "config.php");
+  shell.sed("-i", metadata.dbconfig.db_name, instance_name, "config.php");
+  shell.sed("-i", instance_name+".sugarondemand.com", instance_name+".merxbp.loc", "config.php");
+  shell.sed("-i", metadata.Elastic.host, "localhost", "config.php");
+  spinner.succeed(message);
+
+  message = "Borrando contenido de la carpeta cache";
+  spinner.text = message;
+  shell.rm("-rf", "cache/*");
+  spinner.succeed(message);
+
+  message = "Modificando archivos .htaccess";
+  spinner.text = message;
+  shell.sed("-i", "RewriteBase /", "RewriteBase /sugar/"+ instance_name+".merxbp.loc/", ".htaccess");
+  spinner.succeed(message);
+  spinner.stop();
+});
+
+gulp.task('restore_db', ['change_files'], function* () {
+  shell.cd(instance_dir);
+  var vagrant_ssh_mysql = "vagrant ssh -c 'mysql -u root -proot ";
+
+  message = "Eliminando bases de datos obsoleta origin";
+  promise = promiseFromChildProcess(
+    child_process.spawn(vagrant_ssh_mysql + '-e "DROP DATABASE '+instance_name+'_origin"' + "'", {
+      shell: true
+    })
+  );
+  ora.promise(promise, {text:message});
+  yield promise;
+
+  message = "Eliminando bases de datos obsoleta de pruebas";
+  promise = promiseFromChildProcess(
+    child_process.spawn(vagrant_ssh_mysql + '-e "DROP DATABASE '+instance_name+'"' + "'", {
+      shell: true
+    })
+  );
+  ora.promise(promise, {text:message});
+  yield promise;
+
+  message = "Creando bases de datos nueva origin";
+  promise = promiseFromChildProcess(
+    child_process.spawn(vagrant_ssh_mysql + '-e "CREATE DATABASE '+instance_name+'_origin"' + "'", {
+      shell: true
+    })
+  );
+  ora.promise(promise, {text:message});
+  yield promise;
+
+  message = "Creando bases de datos nueva para pruebas";
+  promise = promiseFromChildProcess(
+    child_process.spawn(vagrant_ssh_mysql + '-e "CREATE DATABASE '+instance_name+'"' + "'", {
+      shell: true
+    })
+  );
+  ora.promise(promise, {text:message});
+  yield promise;
+
+  message = "Restaurando base de datos de pruebas";
+  command = vagrant_ssh_mysql + instance_name +" < /vagrant/"+instance_name+".merxbp.loc/sugar"+metadata.sugar_version+metadata.sugar_flavor+".sql'";
+  promise = promiseFromChildProcess(
+    child_process.spawn(command, {
+      shell: true
+    })
+  );
+  ora.promise(promise, {text:message});
+  yield promise;
+
+  message = "Restaurando base de datos de origin";
+  command = vagrant_ssh_mysql + instance_name +"_origin < /vagrant/"+instance_name+".merxbp.loc/sugar"+metadata.sugar_version+metadata.sugar_flavor+".sql'";
+  promise = promiseFromChildProcess(
+    child_process.spawn(command, {
+      shell: true
+    })
+  );
+  ora.promise(promise, {text:message});
+  yield promise;
+
+  if(metadata.dbconfig.db_scripts && metadata.dbconfig.db_scripts.length){
+    message = "Ejecutando scripts para base de datos de pruebas";
+    // spinner.text = message;
+    scripts_file = instance_name + '_scripts.sql';
+    scripts_file_path = instance_dir +'/'+ scripts_file;
+    shell.rm("-rf", scripts_file_path);
+    var scripts_sql = fs.createWriteStream(scripts_file_path, {
+      flags: 'a'
+    })
+    metadata.dbconfig.db_scripts.forEach(function(script) {
+      scripts_sql.write(script);
+    });
+    scripts_sql.end();
+
+    command = vagrant_ssh_mysql + instance_name +" < /vagrant/"+instance_name+".merxbp.loc/"+scripts_file+"'";
+    promise = promiseFromChildProcess(
+      child_process.spawn(command, {
+        shell: true
+      })
+    );
+    ora.promise(promise, {text:message});
+    yield promise;
+    shell.rm("-rf", scripts_file_path);
+  }
+});
+
+gulp.task('get_version', ['restore_db'], function* () {
+  message = "Configurando version de desarrollo ...";
+  spinner = ora(message).start();
+
+  yield co(fetchLocalDirFromRemote);
+  console.log("instance_dir:",instance_dir);
+  shell.cd(instance_dir);
+
+  if(options.delete_git_directory){
+    shell.rm("-rf", instance_dir + '/.git*');
+  }
+
+  message = "Configurando primer commit";
+  spinner.text = message;
+  shell.exec('touch .gitignore');
+  shell.exec('git init');
+  shell.exec('git add .gitignore');
+  shell.exec('git commit -m "Primer commit"');
+  shell.exec('echo "*" > .gitignore');
+  shell.exec('git add .gitignore');
+  shell.exec('git commit -m "Omitiendo archivos"');
+  spinner.succeed(message);
+
+  message = "Configurando repositorios remotos";
+  spinner.text = message;
+  shell.exec('git remote add local '+ nconf.get('github:local:dir'));
+  shell.exec('git remote add origin git@github.com:'+nconf.get('github:user')+'/custom_sugarcrm.git');
+  shell.exec('git remote add merx git@github.com:MerxBusinessPerformance/custom_sugarcrm.git');
+  spinner.succeed(message);
+
+  message = "Obteniendo cambios desde el repositorio local";
+  spinner.text = message;
+  var git_fetch_origin = yield promiseFromChildProcess(child_process.spawn('git', ['fetch', 'local', metadata.branch], {
+    cwd: instance_dir,
+    stdio: 'inherit'
+  }));
+  spinner.succeed(message);
+
+  command = 'git checkout -b '+metadata.branch+' local/'+metadata.branch;
+  shell.exec(command);
+
+  spinner.succeed("Branch cambiado a " + metadata.branch);
+});
+
+gulp.task('get_dependencies', ['get_version'], function* () {
+  message = "Instanlando dependencias composer";
+  command = "vagrant ssh -c 'cd /vagrant/"+instance_name+".merxbp.loc; composer install'";
+  promise = promiseFromChildProcess(
+    child_process.spawn(command, {
+      cwd: instance_dir,
+      shell: true,
+      stdio: 'inherit'
+    })
+  );
+  ora.promise(promise, {text:message});
+  yield promise;
+
+  message = "Instanlando dependencias npm";
+  command = "vagrant ssh -c 'cd /vagrant/"+instance_name+".merxbp.loc; yarn'";
+  promise = promiseFromChildProcess(
+    child_process.spawn(command, {
+      cwd: instance_dir,
+      shell: true,
+      stdio: 'inherit'
+    })
+  );
+  ora.promise(promise, {text:message});
+  yield promise;
 
 });
 
-gulp.task('default', ['saludo', 'delete_directory', 'extract_files'])
+gulp.task('repair_instance', ['get_dependencies'], function* () {
+  message = "Reparando la instancia"
+  command = "vagrant ssh -c 'cd /vagrant/"+instance_name+".merxbp.loc; php repair.php'";
+  promise = promiseFromChildProcess(
+    child_process.spawn(command, {
+      cwd: instance_dir,
+      shell: true,
+      stdio: 'inherit'
+    })
+  );
+  ora.promise(promise, {text:message});
+  yield promise;
+});
+
+gulp.task('test', ['repair_instance'], function* () {
+  if(options.without_test){
+    return
+  }
+  message = "Pruebas PHP";
+  command = "vagrant ssh -c 'cd /vagrant/"+instance_name+".merxbp.loc/tests; ../vendor/phpunit/phpunit/phpunit'";
+  promise = promiseFromChildProcess(
+    child_process.spawn(command, {
+      cwd: instance_dir,
+      shell: true,
+      stdio: 'inherit'
+    })
+  );
+  // ora.promise(promise, {text:message});
+  yield promise;
+
+  message = "Pruebas JS";
+  command = "vagrant ssh -c 'cd /vagrant/"+instance_name+".merxbp.loc/tests; grunt karma:ci'";
+  promise = promiseFromChildProcess(
+    child_process.spawn(command, {
+      cwd: instance_dir,
+      shell: true,
+      stdio: 'inherit'
+    })
+  );
+  // ora.promise(promise, {text:message});
+  yield promise;
+})
+
+gulp.task('default', ['delete_directory', 'extract_files', 'change_files',
+'restore_db','get_version','get_dependencies','repair_instance','test'
+]);
+
+function promiseFromChildProcess(child) {
+  return new Promise(function (resolve, reject) {
+      child.addListener("error", reject);
+      child.addListener("exit", resolve);
+  });
+};
+
+function *fetchLocalDirFromRemote() {
+  spinner.text = "Actualizando repositorio local";
+  var branch_validate = child_process.spawn(' git branch --list | grep ' + metadata.branch, {
+    cwd: nconf.get('github:local:dir'),
+    shell: true
+  });
+  var output = "";
+  branch_validate.stdout.on('data', function (data) {
+    output = data.toString().trim().replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '').replace('* ', '');
+    // console.log("output:", JSON.stringify(output));
+  });
+  var git_fetch_origin = yield promiseFromChildProcess(branch_validate);
+  if(output && output === metadata.branch){
+    console.log("si tiene el branch");
+    command = 'git checkout ' + metadata.branch;
+    console.log("command:" , command)
+    var git_fetch_origin =  promiseFromChildProcess(child_process.spawn(command, {
+      cwd: nconf.get('github:local:dir'),
+      shell: true,
+      stdio: 'inherit'
+    }));
+    yield git_fetch_origin;
+
+    command = 'git pull ' + nconf.get('github:local:remote') + ' ' + metadata.branch
+    console.log("command:" , command)
+    git_fetch_origin =  promiseFromChildProcess(child_process.spawn(command, {
+      cwd: nconf.get('github:local:dir'),
+      shell: true,
+      stdio: 'inherit'
+    }));
+    yield git_fetch_origin;
+  }
+  else{
+    // console.log("no tiene el branch");
+    command = 'git fetch ' + nconf.get('github:local:remote') + ' ' + metadata.branch + '; git checkout -b ' + metadata.branch + ' ' + nconf.get('github:local:remote') + '/' + metadata.branch;
+    // console.log("command:" , command)
+    var git_fetch_origin = yield promiseFromChildProcess(child_process.spawn(command, {
+      cwd: nconf.get('github:local:dir'),
+      shell: true,
+      stdio: 'inherit'
+    }));
+  }
+  spinner.succeed("Repositorio local actualizado");
+}
