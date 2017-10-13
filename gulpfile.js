@@ -11,7 +11,10 @@ var co = require('co');
 require('gulp-awaitable-tasks')(gulp);
 
 nconf.file({ file: "config.json" });
-var knownOptions = {};
+var knownOptions = {
+  "without_tests": false,
+  "without_db_origin": false
+};
 
 var options = minimist(process.argv.slice(2), knownOptions);
 var instance = options.instance;
@@ -136,18 +139,22 @@ gulp.task('change_files', ['extract_files'], function () {
   spinner.stop();
 });
 
-gulp.task('restore_db', ['change_files'], function* () {
+gulp.task('restore_db', [
+  'change_files'
+], function* () {
   shell.cd(instance_dir);
   var vagrant_ssh_mysql = "vagrant ssh -c 'mysql -u root -proot ";
-
-  message = "Eliminando bases de datos obsoleta origin";
-  promise = promiseFromChildProcess(
-    child_process.spawn(vagrant_ssh_mysql + '-e "DROP DATABASE '+instance_name+'_origin"' + "'", {
-      shell: true
-    })
-  );
-  ora.promise(promise, {text:message});
-  yield promise;
+  console.log(options.without_db_origin);
+  if(!options.without_db_origin){
+    message = "Eliminando bases de datos obsoleta origin";
+    promise = promiseFromChildProcess(
+      child_process.spawn(vagrant_ssh_mysql + '-e "DROP DATABASE '+instance_name+'_origin"' + "'", {
+        shell: true
+      })
+    );
+    ora.promise(promise, {text:message});
+    yield promise;
+  }
 
   message = "Eliminando bases de datos obsoleta de pruebas";
   promise = promiseFromChildProcess(
@@ -158,14 +165,16 @@ gulp.task('restore_db', ['change_files'], function* () {
   ora.promise(promise, {text:message});
   yield promise;
 
-  message = "Creando bases de datos nueva origin";
-  promise = promiseFromChildProcess(
-    child_process.spawn(vagrant_ssh_mysql + '-e "CREATE DATABASE '+instance_name+'_origin"' + "'", {
-      shell: true
-    })
-  );
-  ora.promise(promise, {text:message});
-  yield promise;
+  if(!options.without_db_origin){
+    message = "Creando bases de datos nueva origin";
+    promise = promiseFromChildProcess(
+      child_process.spawn(vagrant_ssh_mysql + '-e "CREATE DATABASE '+instance_name+'_origin"' + "'", {
+        shell: true
+      })
+    );
+    ora.promise(promise, {text:message});
+    yield promise;
+  }
 
   message = "Creando bases de datos nueva para pruebas";
   promise = promiseFromChildProcess(
@@ -186,15 +195,17 @@ gulp.task('restore_db', ['change_files'], function* () {
   ora.promise(promise, {text:message});
   yield promise;
 
-  message = "Restaurando base de datos de origin";
-  command = vagrant_ssh_mysql + instance_name +"_origin < /vagrant/"+instance_name+".merxbp.loc/sugar"+metadata.sugar_version+metadata.sugar_flavor+".sql'";
-  promise = promiseFromChildProcess(
-    child_process.spawn(command, {
-      shell: true
-    })
-  );
-  ora.promise(promise, {text:message});
-  yield promise;
+  if(!options.without_db_origin){
+    message = "Restaurando base de datos de origin";
+    command = vagrant_ssh_mysql + instance_name +"_origin < /vagrant/"+instance_name+".merxbp.loc/sugar"+metadata.sugar_version+metadata.sugar_flavor+".sql'";
+    promise = promiseFromChildProcess(
+      child_process.spawn(command, {
+        shell: true
+      })
+    );
+    ora.promise(promise, {text:message});
+    yield promise;
+  }
 
   if(metadata.dbconfig.db_scripts && metadata.dbconfig.db_scripts.length){
     message = "Ejecutando scripts para base de datos de pruebas";
@@ -308,7 +319,7 @@ gulp.task('repair_instance', ['get_dependencies'], function* () {
 });
 
 gulp.task('test', ['repair_instance'], function* () {
-  if(options.without_test){
+  if(options.without_tests){
     return
   }
   message = "Pruebas PHP";
