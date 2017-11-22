@@ -115,7 +115,7 @@ gulp.task("extract_files",[
   return;
 });
 
-gulp.task('change_files', ['delete_files_directories'], function () {
+gulp.task('change_files', ['extract_files'], function () {
   message = "Modificando archivos config.php";
   spinner = ora(message).start();
   shell.cd(instance_dir);
