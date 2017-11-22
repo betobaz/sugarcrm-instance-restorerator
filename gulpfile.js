@@ -115,26 +115,6 @@ gulp.task("extract_files",[
   return;
 });
 
-gulp.task("delete_files_directories", ['extract_files'],function* () {
-  console.log()
-  if(metadata.delete_files_directories && metadata.delete_files_directories.length){
-    message = "Eliminando archivos.";
-    var files_directories = metadata.delete_files_directories.join(" ");
-    console.log("files_directories:", files_directories);
-    promise = promiseFromChildProcess(
-      child_process.spawn('rm -rf '+files_directories, {
-        cwd: instance_dir,
-        shell: true
-      })
-    );
-    ora.promise(promise, {text:message});
-    yield promise;
-    return;
-  }
-});
-
-
-
 gulp.task('change_files', ['delete_files_directories'], function () {
   message = "Modificando archivos config.php";
   spinner = ora(message).start();
@@ -164,7 +144,7 @@ gulp.task('restore_db', [
 ], function* () {
   shell.cd(instance_dir);
   var vagrant_ssh_mysql = "vagrant ssh -c 'mysql -u root -proot ";
-  console.log(options.without_db_origin);
+  // console.log(options.without_db_origin);
   if(!options.without_db_origin){
     message = "Eliminando bases de datos obsoleta origin";
     promise = promiseFromChildProcess(
@@ -258,7 +238,7 @@ gulp.task('get_version', ['restore_db'], function* () {
   spinner = ora(message).start();
 
   yield co(fetchLocalDirFromRemote);
-  console.log("instance_dir:",instance_dir);
+  // console.log("instance_dir:",instance_dir);
   shell.cd(instance_dir);
 
   if(options.delete_git_directory){
@@ -297,7 +277,23 @@ gulp.task('get_version', ['restore_db'], function* () {
   spinner.succeed("Branch cambiado a " + metadata.branch);
 });
 
-gulp.task('get_dependencies', ['get_version'], function* () {
+gulp.task("delete_files_directories", ['get_version'],function* () {
+  if(metadata.delete_files_directories && metadata.delete_files_directories.length){
+    message = "Eliminando archivos.";
+    var files_directories = metadata.delete_files_directories.join(" ");
+    promise = promiseFromChildProcess(
+      child_process.spawn('rm -rf '+files_directories, {
+        cwd: instance_dir,
+        shell: true
+      })
+    );
+    ora.promise(promise, {text:message});
+    yield promise;
+    return;
+  }
+});
+
+gulp.task('get_dependencies', ['delete_files_directories'], function* () {
   message = "Instanlando dependencias composer";
   command = "vagrant ssh -c 'cd /vagrant/"+instance_name+".merxbp.loc; composer install'";
   promise = promiseFromChildProcess(
@@ -391,9 +387,9 @@ function *fetchLocalDirFromRemote() {
   });
   var git_fetch_origin = yield promiseFromChildProcess(branch_validate);
   if(output && output === metadata.branch){
-    console.log("si tiene el branch");
+    // console.log("si tiene el branch");
     command = 'git checkout ' + metadata.branch;
-    console.log("command:" , command)
+    // console.log("command:" , command)
     var git_fetch_origin =  promiseFromChildProcess(child_process.spawn(command, {
       cwd: nconf.get('github:local:dir'),
       shell: true,
@@ -402,7 +398,7 @@ function *fetchLocalDirFromRemote() {
     yield git_fetch_origin;
 
     command = 'git pull ' + nconf.get('github:local:remote') + ' ' + metadata.branch
-    console.log("command:" , command)
+    // console.log("command:" , command)
     git_fetch_origin =  promiseFromChildProcess(child_process.spawn(command, {
       cwd: nconf.get('github:local:dir'),
       shell: true,
