@@ -277,6 +277,24 @@ gulp.task('get_version', ['restore_db'], function* () {
   spinner.succeed("Branch cambiado a " + metadata.branch);
 });
 
+gulp.task("delete_files_directories", function* () {
+  console.log()
+  if(metadata.delete_files_directories && metadata.delete_files_directories.length){
+    message = "Eliminando archivos.";
+    var files_directories = metadata.delete_files_directories.join(" ");
+    console.log("files_directories:", files_directories);
+    promise = promiseFromChildProcess(
+      child_process.spawn('rm -rf '+files_directories, {
+        cwd: instance_dir,
+        shell: true
+      })
+    );
+    ora.promise(promise, {text:message});
+    yield promise;
+    return;
+  }
+});
+
 gulp.task('get_dependencies', ['get_version'], function* () {
   message = "Instanlando dependencias composer";
   command = "vagrant ssh -c 'cd /vagrant/"+instance_name+".merxbp.loc; composer install'";

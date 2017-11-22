@@ -16,6 +16,9 @@
       },
       "db_scripts":[
         "UPDATE users SET deleted = 1 WHERE deleted = 0 AND is_admin = 0;"
+      ],
+      "delete_files_directories":[
+        "/composer.lock"
       ]
     }
   },
